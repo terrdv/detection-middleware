@@ -36,3 +36,17 @@ func (s *Store) Get(key string) *ClientState {
 	}
 	return value
 }
+
+func (s *Store) Record(key string, t time.Time) *ClientState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.clients[key]
+	if st == nil {
+		st = &ClientState{}
+		s.clients[key] = st
+	}
+	st.RequestTimes = append(st.RequestTimes, t)
+
+	//todo trim entries
+	return st
+}

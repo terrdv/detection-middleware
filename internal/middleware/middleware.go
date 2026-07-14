@@ -13,9 +13,17 @@ import (
 
 func New(d *detector.Detector, cfg config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
+
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			//todo
-			next.ServeHTTP(w, r)
+			result := d.Evaluate(r)
+			if result.Action == config.ActionAllow {
+				next.ServeHTTP(w, r)
+			} else if result.Action == config.ActionChallenge {
+				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+			} else if result.Action == config.ActionReject {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+			}
+
 		})
 	}
 }

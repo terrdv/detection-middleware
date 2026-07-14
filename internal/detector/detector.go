@@ -2,6 +2,7 @@ package detector
 
 import (
 	"net/http"
+	"time"
 
 	"detection-middleware/internal/config"
 	"detection-middleware/internal/store"
@@ -21,6 +22,8 @@ func New(cfg config.Config, s *store.Store) *Detector {
 			userAgentSignal{},
 			headersSignal{},
 			timingSignal{},
+			rateLimitSignal{window: cfg.RateLimitWindow, limit: cfg.RateLimitLimit},
+			honeypotSignal{path: cfg.HoneypotPath},
 		},
 		store: s,
 		cfg:   cfg,
@@ -35,7 +38,7 @@ type Result struct {
 
 // Evaluate scores a request across all signals and returns the decision.
 func (d *Detector) Evaluate(r *http.Request) Result {
-	clientState := d.store.Get(r.RemoteAddr)
+	clientState := d.store.Record(r.RemoteAddr, time.Now())
 
 	contributions := make(map[string]float64, len(d.signals))
 	var score float64
