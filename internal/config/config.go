@@ -28,9 +28,20 @@ type Config struct {
 	// HoneypotPath is the hidden trap endpoint; any request to it is treated
 	// as high-confidence bot traffic.
 	HoneypotPath string
+
+	// TrustForwardedFor controls how a client is identified. When false, the
+	// key is the TCP source IP (RemoteAddr with the port stripped). When true,
+	// the first hop in the X-Forwarded-For header is used instead — required
+	// when running behind a trusted proxy, and handy for load tests that want
+	// to simulate many distinct clients from one machine. Leave it false unless
+	// a trusted proxy sets the header: clients can forge it otherwise.
+	TrustForwardedFor bool
 	// RateLimitWindow and RateLimitLimit bound how many requests a single
 	// client may make within the sliding window before the rate_limit signal
-	// starts contributing suspicion.
+	// starts contributing suspicion. The signal ramps to full suspicion at
+	// 2*RateLimitLimit requests, so keep 2*RateLimitLimit <= the store's
+	// maxSamples cap, or the count gets clipped and rate_limit can never reach
+	// 1.0.
 	RateLimitWindow time.Duration
 	RateLimitLimit  int
 }
@@ -51,6 +62,7 @@ func Default() Config {
 		Weights:            weights,
 		HoneypotPath:       "/wp-admin",
 		RateLimitWindow:    time.Minute,
-		RateLimitLimit:     100,
+		// 2*50 = 100 <= maxSamples (128), so rate_limit can still saturate.
+		RateLimitLimit: 50,
 	}
 }

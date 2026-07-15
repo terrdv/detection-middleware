@@ -6,6 +6,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"detection-middleware/internal/config"
 	"detection-middleware/internal/detector"
@@ -16,7 +17,16 @@ import (
 func main() {
 	cfg := config.Default()
 
-	s := store.New()
+	// For load testing: let the client self-identify via X-Forwarded-For so a
+	// single machine can simulate many distinct clients. Off by default because
+	// the header is spoofable — only enable it behind a trusted proxy or for
+	// local benchmarking.
+	if os.Getenv("TRUST_XFF") == "1" {
+		cfg.TrustForwardedFor = true
+		log.Print("TRUST_XFF=1: trusting X-Forwarded-For for client identity")
+	}
+
+	s := store.New(cfg.RateLimitWindow)
 	d := detector.New(cfg, s)
 	mw := middleware.New(d, cfg)
 

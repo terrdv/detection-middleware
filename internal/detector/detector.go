@@ -1,7 +1,9 @@
 package detector
 
 import (
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"detection-middleware/internal/config"
@@ -36,9 +38,32 @@ type Result struct {
 	Contributions map[string]float64
 }
 
+// clientKey derives the identity a request is tracked under. By default this is
+// the TCP source IP with the port stripped, so every request from one client
+// shares state (r.RemoteAddr is "IP:port", and the port changes per connection,
+// so using it raw would give each request its own bucket). When configured to
+// trust it, the first hop of X-Forwarded-For is used instead.
+func (d *Detector) clientKey(r *http.Request) string {
+	if d.cfg.TrustForwardedFor {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			// The list is "client, proxy1, proxy2..."; the first entry is the
+			// original client.
+			first, _, _ := strings.Cut(xff, ",")
+			return strings.TrimSpace(first)
+		}
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		// No port present (or malformed) — fall back to the raw value.
+		return r.RemoteAddr
+	}
+	return host
+}
+
 // Evaluate scores a request across all signals and returns the decision.
 func (d *Detector) Evaluate(r *http.Request) Result {
-	clientState := d.store.Record(r.RemoteAddr, time.Now())
+	clientState := d.store.Record(d.clientKey(r), time.Now())
 
 	contributions := make(map[string]float64, len(d.signals))
 	var score float64
